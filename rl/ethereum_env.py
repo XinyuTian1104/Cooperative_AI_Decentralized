@@ -4,12 +4,14 @@ import os
 
 import numpy as np
 from validators import Validator
+from utils.action_space import MultiAgentActionSpace
+from utils.observation_space import MultiAgentObservationSpace
 
 import gym
 from gym import spaces
 
 
-class CustomEnv(gym.Env):
+class EthereumEnv(gym.Env):
     def __init__(self, validator_size):
         """
         Initialize your custom environment.
@@ -35,17 +37,17 @@ class CustomEnv(gym.Env):
         # [[0: honest,    1: malicious], the 1st row is the strategy
         #  [0: not check, 1: check],     the 2nd row is whether to check
         #  [0: not vote,  1: vote]].     the 3rd row is whether to vote
-        self.action_space = spaces.MultiBinary([3, 2], seed=42)
-        
-        self.observation_space = spaces.Dict(
-            {
-                # the reward and penalty of every validator
-                "reward_and_penalty": spaces.Box(low=0, high=1, shape=(self.validator_size,), dtype=np.float32),
-                # the active balance of every validator
-                "active_balance": spaces.Box(low=0, high=1, shape=(self.validator_size,), dtype=np.float32),
-                # the proportion of honest validators
-                "honest_proportion": spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32),
-            },
+
+        self.action_space = MultiAgentActionSpace(
+            [spaces.MultiBinary([3, 2]) for _ in range(self.validator_size)])
+
+        self.observation_space = MultiAgentObservationSpace(
+            [spaces.Dict(
+                {"reward_and_penalty": spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32),
+                "active_balance": spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32),
+                "honest_proportion": spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
+                }) for _ in range(self.validator_size)
+            ]
         )
 
         # create the log directory if not exist
@@ -60,7 +62,7 @@ class CustomEnv(gym.Env):
         self.window = None
         self.clock = None
 
-        super(CustomEnv, self).__init__()
+        super(EthereumEnv, self).__init__()
 
     def reset(self):
         """
