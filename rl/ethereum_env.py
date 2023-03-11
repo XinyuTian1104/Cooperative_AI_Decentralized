@@ -40,7 +40,7 @@ class CustomEnv(gym.Env):
         self.observation_space = spaces.Dict(
             {
                 # the reward and penalty of every validator
-                "reward": spaces.Box(low=0, high=1, shape=(self.validator_size,), dtype=np.float32),
+                "reward_and_penalty": spaces.Box(low=0, high=1, shape=(self.validator_size,), dtype=np.float32),
                 # the active balance of every validator
                 "active_balance": spaces.Box(low=0, high=1, shape=(self.validator_size,), dtype=np.float32),
                 # the proportion of honest validators
@@ -70,7 +70,6 @@ class CustomEnv(gym.Env):
         observation : numpy array
             The initial observation of the environment.
         """
-
         for i in range(self.validator_size):
             strategy = np.random.randint(0, 2)
             status = 1
@@ -85,10 +84,10 @@ class CustomEnv(gym.Env):
             proportion += (self.validators[i].strategy ==
                            0) / self.validator_size
         self.initial_honest_proportion = proportion
+        self.proportion_of_honest = proportion
         # print(f"The initial proportion of honest: {self.proportion_of_honest}.")
 
         # Generate the initial value of alpha
-        self.alpha = 1
         self.total_active_balance = 32 * self.validator_size
 
         observation = self._get_obs()
@@ -118,10 +117,23 @@ class CustomEnv(gym.Env):
             Additional information about the step.
         """
 
-        # Update the environment: validators
         # Generate a proposer
         proposer = np.random.randint(0, self.validator_size)
 
+        # Update the status of validators
+        for i in range(self.validator_size):
+            if i == proposer:
+                self.validators[i].status = 0
+            else:
+                self.validators[i].status = 1
+        
+        # All validators take actions
+        for i in range(self.validator_size):
+            # update the strategy
+            self.validators[i].strategy = action[i][0]
+        
+        
+        
         proportion = 0
         for i in range(self.validator_size):
             proportion += (self.validators[i].strategy ==
@@ -135,8 +147,8 @@ class CustomEnv(gym.Env):
                 self.validators[i].status = 0
             else:
                 self.validators[i].status = 1
-            self.validators[i].update_balances(
-                self.proportion_of_honest, self.alpha, self.total_active_balance)
+            # self.validators[i].update_balances(
+            #     self.proportion_of_honest, self.alpha, self.total_active_balance)
             # print(f"validator {i} current_balance: ", self.validators[i].current_balance)
             # print(f"total_active_balance for round {i}: ", self.total_active_balance)
 
