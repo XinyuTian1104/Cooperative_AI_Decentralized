@@ -37,15 +37,16 @@ class EthereumEnv(gym.Env):
         self.action_space = MultiAgentActionSpace(
             [spaces.Discrete(2) for _ in range(self.validator_size)])
 
+        # The observation space of validators: the reward and penalty and the current balance of every validator
         # self.observation_space = MultiAgentObservationSpace(
         #     [spaces.Dict(
         #         {"reward_and_penalty": spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32),
-        #         "active_balance": spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
+        #         "current_balance": spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
         #         }) for _ in range(self.validator_size)
         #     ]
         # )
 
-        # The observation space of validators: the active balance of every validator
+        # The observation space of validators: the current balance of every validator
         self.observation_space = MultiAgentObservationSpace(
             [spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32) for _ in range(self.validator_size)]
         )
@@ -87,7 +88,6 @@ class EthereumEnv(gym.Env):
                            0) / self.validator_size
         self.initial_honest_proportion = proportion
         self.proportion_of_honest = proportion
-        # print(f"The initial proportion of honest: {self.proportion_of_honest}.")
 
         # Generate the initial value of alpha
         self.total_active_balance = 32 * self.validator_size
@@ -98,7 +98,7 @@ class EthereumEnv(gym.Env):
         self.counter = 0
 
         # return observation
-        return observation
+        return observation, info
 
     def step(self, action):
         """
@@ -159,7 +159,6 @@ class EthereumEnv(gym.Env):
             total_active_balance = total_active_balance + \
                 self.validators[i].current_balance
         self.total_active_balance = total_active_balance
-        # print(f"total_active_balance: ", self.total_active_balance)
 
         # Update the value of alpha in penalty
         self.alpha = self.alpha + action[0]  # Action is a float
@@ -179,9 +178,6 @@ class EthereumEnv(gym.Env):
                     self.total_active_balance
             else:
                 pass
-            # print(f"validator {i} has current balance: ", self.validators[i].current_balance)
-            # print(f"total_active_balance: ", self.total_active_balance)
-        # print("probability: ", probability)
 
         terminated = False
         if self.proportion_of_honest == 1:
@@ -226,7 +222,8 @@ class EthereumEnv(gym.Env):
     def _get_obs(self):
         obs = []
         for i in range(self.validator_size):
-            obs.append(self.validators[i].strategy)
+            obs.append(self.validators[i].current_balance)
+        return obs
 
     def _get_info(self):
         return {"the honest proportion": self.proportion_of_honest}
