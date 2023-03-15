@@ -224,8 +224,9 @@ class EthereumEnv(gym.Env):
         return payload
 
     def _get_obs(self):
-        return {"honest_proportion": self.proportion_of_honest,
-                "target_honest_proportion": 1}
+        obs = []
+        for i in range(self.validator_size):
+            obs.append(self.validators[i].strategy)
 
     def _get_info(self):
         return {"the honest proportion": self.proportion_of_honest}
