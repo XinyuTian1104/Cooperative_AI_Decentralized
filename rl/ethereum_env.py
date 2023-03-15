@@ -12,7 +12,7 @@ from gym import spaces
 
 
 class EthereumEnv(gym.Env):
-    def __init__(self, validator_size):
+    def __init__(self, validator_size, threshold):
         """
         Initialize your custom environment.
         Parameters:
@@ -20,10 +20,7 @@ class EthereumEnv(gym.Env):
             self. validators : a list.             The list of the validators
             self. total_active_balance : a float.  The total active balance of the validators
             self. proportion_of_honest : a float.  The proportion of honest validators
-            self. action_space : a 3*2 matrix.     The space of validator actions in 
-                                                        (1) choosing strategy
-                                                        (2) checking the block
-                                                        (3) voting on the block
+            self. action_space : 0 or 1            The strategy of validators: 0: honest; 1: malicious
             self. observation_space : a dict.      The space of observations: validators
         ----------
         """
@@ -33,21 +30,24 @@ class EthereumEnv(gym.Env):
         self.total_active_balance = 0
         self.proportion_of_honest = 0
 
-        # The action space of validators: a 3*2 matrix.
-        # [[0: honest,    1: malicious], the 1st row is the strategy
-        #  [0: not check, 1: check],     the 2nd row is whether to check
-        #  [0: not vote,  1: vote]].     the 3rd row is whether to vote
+        # The threshold
+        self.threshold = threshold
 
+        # The action space of validators: 0: honest; 1: malicious
         self.action_space = MultiAgentActionSpace(
-            [spaces.MultiBinary([3, 2]) for _ in range(self.validator_size)])
+            [spaces.Discrete(2) for _ in range(self.validator_size)])
 
+        # self.observation_space = MultiAgentObservationSpace(
+        #     [spaces.Dict(
+        #         {"reward_and_penalty": spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32),
+        #         "active_balance": spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
+        #         }) for _ in range(self.validator_size)
+        #     ]
+        # )
+
+        # The observation space of validators: the active balance of every validator
         self.observation_space = MultiAgentObservationSpace(
-            [spaces.Dict(
-                {"reward_and_penalty": spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32),
-                "active_balance": spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32),
-                "honest_proportion": spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32)
-                }) for _ in range(self.validator_size)
-            ]
+            [spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32) for _ in range(self.validator_size)]
         )
 
         # create the log directory if not exist
@@ -219,7 +219,7 @@ class EthereumEnv(gym.Env):
             alpha=self.alpha,
             proportion_of_honest=self.proportion_of_honest,
             rounds=self.counter,
-            initial_honest_proportion=self.initial_honest_proportion,
+            initial_honest_proportion=self.initial_honest_proportion
         )
         return payload
 
