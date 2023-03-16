@@ -1,1 +1,0 @@
-{'proportion_of_honest': 0.5940594059405944, 'rounds': 0, 'initial_honest_proportion': 0.4653465346534656}

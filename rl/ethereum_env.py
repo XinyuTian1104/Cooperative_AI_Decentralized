@@ -156,15 +156,14 @@ class EthereumEnv(gym.Env):
         elif self.proportion_of_honest == 0:
             terminated = True
 
+        if self.counter >= 256:
+            terminated = True
+
         payload = self.render()
         self.log_file.write(str(payload) + "\n")
 
         if terminated:
             return observation, rewards, terminated, info
-        
-        # log observation
-        with open("observation.txt", "a") as f:
-            f.write(str(observation) + "\n")
 
         # counter increment
         self.counter += 1
