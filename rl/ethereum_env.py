@@ -29,6 +29,7 @@ class EthereumEnv(gym.Env):
         self.validators = []
         self.total_active_balance = 0
         self.proportion_of_honest = 0
+        self.total_reward = [0 for _ in range(self.validator_size)]
 
         # The threshold
         self.threshold = threshold
@@ -118,6 +119,9 @@ class EthereumEnv(gym.Env):
         info : dict
             Additional information about the step.
         """
+        # Update the actions (strategies) of validators
+        for i in range(self.validator_size):
+            self.validators[i].strategy = action[i]
 
         # Generate a proposer
         proposer = np.random.randint(0, self.validator_size)
@@ -128,63 +132,46 @@ class EthereumEnv(gym.Env):
                 self.validators[i].status = 0
             else:
                 self.validators[i].status = 1
-        
-        observation = self._get_obs()
 
-        # All validators take actions
+        rewards = [self.validators[i].get_reward(self.total_active_balance, self.proportion_of_honest, self.validators[proposer].strategy) for i in range(self.validator_size)]
+
+        # Update the current balance of validators
         for i in range(self.validator_size):
-            # update the strategy
-            self.validators[i].strategy = action[i]
-        
-        for i in range(self.validator_size):
-            # update the current balance
             self.validators[i].update_balances(
                 self.proportion_of_honest, self.total_active_balance)
-        
+            
+        # Update the proportion of honest validators
         proportion = 0
         for i in range(self.validator_size):
             proportion += (self.validators[i].strategy ==
                            0) / self.validator_size
         self.proportion_of_honest = proportion
-        # print("proportion_of_honest: ", self.proportion_of_honest)
 
+        # Update total active balance
         total_active_balance = 0
         for i in range(self.validator_size):
             total_active_balance = total_active_balance + \
                 self.validators[i].current_balance
         self.total_active_balance = total_active_balance
 
-        # terminated = np.array_equal(self.proportion_of_honest, 1)
-        reward = self.proportion_of_honest
-
-        
+        observation = self._get_obs()
 
         info = self._get_info()
-
-        # Update the strategies of validators
-        probability = 0
-        for i in range(self.validator_size):
-            if self.validators[i].strategy == 0:
-                probability += self.validators[i].current_balance / \
-                    self.total_active_balance
-            else:
-                pass
 
         terminated = False
         if self.proportion_of_honest == 1:
             terminated = True
-        elif probability >= 1:
+        elif self.proportion_of_honest == 0:
             terminated = True
+        else:
+            terminated = False
 
         payload = self.render()
         self.log_file.write(str(payload) + "\n")
 
         if terminated:
-            return observation, reward, terminated, info
-
-        for i in range(self.validator_size):
-            self.validators[i].strategy = np.random.choice(
-                [0, 1], p=[probability, 1-probability])
+            return observation, rewards, terminated, info
+        
         # log observation
         with open("observation.txt", "a") as f:
             f.write(str(observation) + "\n")
@@ -192,7 +179,7 @@ class EthereumEnv(gym.Env):
         # counter increment
         self.counter += 1
 
-        return observation, reward, terminated, info
+        return observation, rewards, terminated, info
 
     def render(self):
         """
