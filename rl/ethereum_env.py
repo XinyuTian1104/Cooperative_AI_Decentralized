@@ -89,7 +89,7 @@ class EthereumEnv(gym.Env):
         self.initial_honest_proportion = proportion
         self.proportion_of_honest = proportion
 
-        # Generate the initial value of alpha
+        # Generate the initial value of total_active_balance
         self.total_active_balance = 32 * self.validator_size
 
         observation = self._get_obs()
@@ -129,12 +129,17 @@ class EthereumEnv(gym.Env):
             else:
                 self.validators[i].status = 1
         
+        observation = self._get_obs()
+
         # All validators take actions
         for i in range(self.validator_size):
             # update the strategy
-            self.validators[i].strategy = action[i][0]
+            self.validators[i].strategy = action[i]
         
-        
+        for i in range(self.validator_size):
+            # update the current balance
+            self.validators[i].update_balances(
+                self.proportion_of_honest, self.total_active_balance)
         
         proportion = 0
         for i in range(self.validator_size):
@@ -143,30 +148,16 @@ class EthereumEnv(gym.Env):
         self.proportion_of_honest = proportion
         # print("proportion_of_honest: ", self.proportion_of_honest)
 
-        # Update the validators
-        for i in range(self.validator_size):
-            if i == proposer:
-                self.validators[i].status = 0
-            else:
-                self.validators[i].status = 1
-            # self.validators[i].update_balances(
-            #     self.proportion_of_honest, self.alpha, self.total_active_balance)
-            # print(f"validator {i} current_balance: ", self.validators[i].current_balance)
-            # print(f"total_active_balance for round {i}: ", self.total_active_balance)
-
         total_active_balance = 0
         for i in range(self.validator_size):
             total_active_balance = total_active_balance + \
                 self.validators[i].current_balance
         self.total_active_balance = total_active_balance
 
-        # Update the value of alpha in penalty
-        self.alpha = self.alpha + action[0]  # Action is a float
-
         # terminated = np.array_equal(self.proportion_of_honest, 1)
         reward = self.proportion_of_honest
 
-        observation = self._get_obs()
+        
 
         info = self._get_info()
 
@@ -212,7 +203,6 @@ class EthereumEnv(gym.Env):
             The mode to render the environment in.
         """
         payload = dict(
-            alpha=self.alpha,
             proportion_of_honest=self.proportion_of_honest,
             rounds=self.counter,
             initial_honest_proportion=self.initial_honest_proportion
