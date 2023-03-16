@@ -3,15 +3,15 @@ import json
 import os
 
 import numpy as np
-from rl.validators import Validator
-from rl.utils.action_space import MultiAgentActionSpace
-from rl.utils.observation_space import MultiAgentObservationSpace
+from validators import Validator
+from utils.action_space import MultiAgentActionSpace
+from utils.observation_space import MultiAgentObservationSpace
 
 import gym
 from gym import spaces
 
 
-class EthereumEnv(gym.Env):
+class AlgorandEnv(gym.Env):
     def __init__(self, validator_size):
         """
         Initialize your custom environment.
@@ -34,10 +34,10 @@ class EthereumEnv(gym.Env):
         # The action space of validators: 0: honest; 1: malicious
         self.action_space = MultiAgentActionSpace(
             [spaces.Discrete(2) for _ in range(self.validator_size)])
-
+        
         # The observation space of validators: the current balance of every validator
         self.observation_space = MultiAgentObservationSpace(
-            [spaces.Box(low=-np.inf, high=np.inf, shape=(1,), dtype=np.float32) for _ in range(self.validator_size)]
+            [spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32) for _ in range(self.validator_size)]
         )
 
         # create the log directory if not exist
@@ -86,8 +86,8 @@ class EthereumEnv(gym.Env):
 
         self.counter = 0
 
-        return observation
-        # return observation, info
+        # return observation
+        return observation, info
 
     def step(self, action):
         """
@@ -126,7 +126,7 @@ class EthereumEnv(gym.Env):
         # Update the current balance of validators
         for i in range(self.validator_size):
             self.validators[i].update_balances(
-                self.proportion_of_honest, self.total_active_balance, self.validators[proposer].strategy)
+                self.proportion_of_honest, self.total_active_balance)
             
         # Update the proportion of honest validators
         proportion = 0
@@ -147,14 +147,12 @@ class EthereumEnv(gym.Env):
         info = self._get_info()
 
         terminated = False
-
-        if self.total_active_balance <= 0:
-            terminated = True
-
         if self.proportion_of_honest == 1:
             terminated = True
         elif self.proportion_of_honest == 0:
             terminated = True
+        else:
+            terminated = False
 
         payload = self.render()
         self.log_file.write(str(payload) + "\n")
@@ -189,7 +187,7 @@ class EthereumEnv(gym.Env):
     def _get_obs(self):
         obs = []
         for i in range(self.validator_size):
-            obs.append([self.validators[i].current_balance])
+            obs.append(self.validators[i].current_balance)
         return obs
 
     def _get_info(self):
