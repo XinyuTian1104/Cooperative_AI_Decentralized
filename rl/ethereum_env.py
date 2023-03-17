@@ -62,7 +62,12 @@ class EthereumEnv(gym.Env):
         observation : numpy array
             The initial observation of the environment.
         """
+        self.validators = []
         for i in range(self.validator_size):
+            # if i < self.validator_size / 2:
+            #     strategy = 0
+            # else:
+            #     strategy = 1
             strategy = np.random.randint(0, 2)
             status = 1
             current_balance = 32
@@ -77,6 +82,7 @@ class EthereumEnv(gym.Env):
                            0) / self.validator_size
         self.initial_honest_proportion = proportion
         self.proportion_of_honest = proportion
+        # print(f"initial proportion of honest validators: {proportion}.")
 
         # Generate the initial value of total_active_balance
         self.total_active_balance = 32 * self.validator_size
@@ -192,4 +198,7 @@ class EthereumEnv(gym.Env):
         return obs
 
     def _get_info(self):
-        return {"the honest proportion": self.proportion_of_honest}
+        info = []  
+        for i in range(self.validator_size):
+            info.append([self.proportion_of_honest,self.total_active_balance,self.initial_honest_proportion])
+        return info

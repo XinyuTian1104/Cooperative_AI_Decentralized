@@ -1,10 +1,11 @@
+# from rl.ethereum_env import EthereumEnv
 import collections
 # from ma_gym.wrappers import Monitor
 # from ..ethereum_env import EthereumEnv
 import importlib
 import random
 import sys
-
+import pickle
 import gym
 import numpy as np
 import torch
@@ -12,10 +13,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import importlib
+from tqdm import tqdm
 
 sys.path.append('/Users/xinyutian/Desktop/dku_sw/')
 rl = importlib.import_module('rl.ethereum_env')
-from rl.ethereum_env import EthereumEnv
+EthereumEnv = rl.EthereumEnv
 
 USE_WANDB = False  # if enabled, logs data on wandb server
 
@@ -81,8 +83,11 @@ class QNet(nn.Module):
 
 
 def train(q, q_target, memory, optimizer, gamma, batch_size, update_iter=10):
+    loss_list = []
+    reward_list = []
+    
     for epoch in range(update_iter):
-        print("epoch: ", epoch)
+        # print("epoch: ", epoch)
         s, a, r, s_prime, done_mask = memory.sample(batch_size)
 
         q_out = q(s)
@@ -91,26 +96,37 @@ def train(q, q_target, memory, optimizer, gamma, batch_size, update_iter=10):
         target = r + gamma * max_q_prime * done_mask
         loss = F.smooth_l1_loss(q_a, target.detach())
 
+        loss_list.append(loss.abs().mean().item())
+        reward_list.append(r)
+
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+    return loss_list, reward_list
 
 
 def test(env, num_episodes, q):
+    information = []
+
     score = np.zeros(env.validator_size)
     for episode_i in range(num_episodes):
         print("episode_i: ", episode_i)
         state = env.reset()
         done = False
+        information_at_i = []
         while not done:
-            # print("state: ", state)
             action = q.sample_action(torch.Tensor(state).unsqueeze(0), epsilon=0)[
                 0].data.cpu().numpy().tolist()
             next_state, reward, done, info = env.step(action)
             score += np.array(reward)
             state = next_state
+            information_at_i.append(info)
+        information.append(information_at_i)
 
-    return sum(score / num_episodes)
+
+    return sum(score / num_episodes), information
+
+# learning
 
 
 def main(lr, gamma, batch_size, buffer_limit, log_interval, max_episodes,
@@ -122,19 +138,26 @@ def main(lr, gamma, batch_size, buffer_limit, log_interval, max_episodes,
     memory = ReplayBuffer(buffer_limit)
     # print("memory created")
 
+    # Initialize networks
     q = QNet(env.observation_space, env.action_space)
     # print("q created")
     q_target = QNet(env.observation_space, env.action_space)
     # print("q_target created")
     q_target.load_state_dict(q.state_dict())
     # print("q_target loaded")
+
+    # Initialize optimizer
     optimizer = optim.Adam(q.parameters(), lr=lr)
     # print("optimizer created")
 
     score = np.zeros(env.validator_size)
     # print("score created")
 
-    for episode_i in range(max_episodes):
+    loss_lists = []
+    reward_lists = []
+    information = []
+
+    for episode_i in tqdm(range(max_episodes)):
         # print("episode_i: ", episode_i)
         epsilon = max(min_epsilon, max_epsilon - (max_epsilon -
                       min_epsilon) * (episode_i / (0.4 * max_episodes)))
@@ -151,24 +174,31 @@ def main(lr, gamma, batch_size, buffer_limit, log_interval, max_episodes,
             state = next_state
 
         if memory.size() > warm_up_steps:
-            train(q, q_target, memory, optimizer,
+            loss_list, reward_list = train(q, q_target, memory, optimizer,
                   gamma, batch_size, update_iter)
+            loss_lists.append(loss_list)
+            reward_lists.append(reward_list)
 
         if episode_i % log_interval == 0 and episode_i != 0:
             q_target.load_state_dict(q.state_dict())
             print("q_target loaded")
-            test_score = test(test_env, test_episodes, q)
+            test_score, information = test(test_env, test_episodes, q)
+            information.append(information)
             print("test_score: ", test_score)
             print("#{:<10}/{} episodes , avg train score : {:.1f}, test score: {:.1f} n_buffer : {}, eps : {:.1f}"
                   .format(episode_i, max_episodes, sum(score / log_interval), test_score, memory.size(), epsilon))
-            # if USE_WANDB:
-            #     wandb.log({'episode': episode_i, 'test-score': test_score,
-            #                'buffer-size': memory.size(), 'epsilon': epsilon, 'train-score': sum(score / log_interval)})
             score = np.zeros(env.validator_size)
             print("score reset")
 
     env.close()
     test_env.close()
+    torch.save(q.state_dict(), 'model.pth')
+
+    # test the model   
+    q.load_state_dict(torch.load('model.pth'))
+    test(test_env, test_episodes, q)
+
+    return loss_lists, reward_lists, information
 
 
 if __name__ == '__main__':
@@ -176,18 +206,23 @@ if __name__ == '__main__':
         'lr': 0.0005,
         'batch_size': 101,
         'gamma': 0.99,
-        'buffer_limit': 50000,
+        'buffer_limit': 5000,
+        # 'buffer_limit': 64 * 101,
         'log_interval': 20,
-        'max_episodes': 30000,
+        'max_episodes': 64,
         'max_epsilon': 0.9,
         'min_epsilon': 0.1,
         'test_episodes': 5,
-        'warm_up_steps': 2000,
+        'warm_up_steps': 200,
+        # 'warm_up_steps': 16,
         'update_iter': 10}
-    if USE_WANDB:
-        import wandb
+    
+    loss_lists, reward_lists, information = main(**kwargs)
+    # save to pickle
+    with open('loss_lists.pkl', 'wb') as f:
+        pickle.dump(loss_lists, f)
+    with open('reward_lists.pkl', 'wb') as f:
+        pickle.dump(reward_lists, f)
+    with open('information.pkl', 'wb') as f:
+        pickle.dump(information, f)
 
-        wandb.init(project='minimal-marl',
-                   config={'algo': 'idqn', **kwargs}, monitor_gym=True)
-
-    main(**kwargs)
